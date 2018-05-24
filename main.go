@@ -15,7 +15,7 @@ func visit(path string, fi os.FileInfo, err error) error {
 	return nil
 }
 
-func readDirNames(dirname string) ([]string, error) {
+func readDir(dirname string) ([]string, error) {
 	d, err := os.Open(dirname)
 	if err != nil {
 		return nil, err
@@ -26,6 +26,10 @@ func readDirNames(dirname string) ([]string, error) {
 		return nil, err
 	}
 	return names, nil
+}
+
+func exiton(err error, msg string) {
+	elwms.Exiton2(err, msg)
 }
 
 func main() {
@@ -48,12 +52,28 @@ func main() {
 		}
 		root = flag.Arg(0)
 	}
-	// readDirNames reads the directory named by dirname and returns
 
-	tree, err := readDirNames(root)
-	elwms.Exiton(err, "readDirNames("+root+") failed")
+	d, err := os.Open(root)
+	elwms.Exiton(err, "Open("+root+") failed")
+	defer d.Close()
+
+	tree, err := d.Readdir(-1)
+	elwms.Exiton(err, "readDir("+root+") failed")
 	for i, entry := range tree {
-		fmt.Printf("-%d-> %s\n", i, entry)
+		cwd := root
+		fmt.Printf("-%d-> %s\n", i, entry.Name())
+		if entry.IsDir() {
+			subd, err := os.Open(cwd + "/" + entry.Name())
+			elwms.Exiton(err, "Open("+entry.Name()+") failed")
+			subtree, err := subd.Readdir(-1)
+			elwms.Exiton(err, "Readdir("+entry.Name()+") failed")
+			for si, se := range subtree {
+				fmt.Printf("   -%d-> %s\n", si, se.Name())
+			}
+			tree = append(tree, subtree...)
+			//			fmt.Printf("### tree: %#v", tree)
+			subd.Close()
+		}
 	}
 
 	statement, err := database.Prepare("INSERT INTO notes (creation, last_modification, title, content) VALUES (?, ?, ?, ?)")
